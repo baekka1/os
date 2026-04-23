@@ -1,47 +1,67 @@
 #pragma once
 
-#include "common.h"
-
-#define READ_CSR(reg)                                                          \
-    ({                                                                         \
-        unsigned long __tmp;                                                   \
-        __asm__ __volatile__("csrr %0, " #reg : "=r"(__tmp));                  \
-        __tmp;                                                                 \
-    })
-
-#define WRITE_CSR(reg, value)                                                  \
-    do {                                                                       \
-        uint32_t __tmp = (value);                                              \
-        __asm__ __volatile__("csrw " #reg ", %0" ::"r"(__tmp));                \
-    } while (0)
-
-#define PANIC(fmt, ...) 													   \
-	do { \
-		printf("PANIC: %s: %d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__); \
-		while (1) {} \
-	} while (0)
-
-#define PROCS_MAX 8
-#define PROC_UNUSED 0
-#define PROC_RUNNABLE 1
-#define SATP_SV32 (1u << 31)
-#define PAGE_V (1 << 0) // "Valid" bit (entry is enabled)
-#define PAGE_R (1 << 1)
-#define PAGE_W (1 << 2)
-#define PAGE_X (1 << 3)
-#define PAGE_U (1 << 4)
-
-#define SCAUSE_ECALL 8
-
-#define USER_BASE 0x10000000
-
-#define SSTATUS_SPIE (1 << 5)
-
-#define PROC_EXITED 2
-
 struct sbiret {
 	long error;
 	long value;
+};
+
+#include "common.h"
+#define PROCS_MAX 8       // Maximum number of processes
+
+#define PROC_UNUSED   0   // Unused process control structure
+#define PROC_RUNNABLE 1   // Runnable process
+
+#define SATP_SV32 (1u << 31)
+#define PAGE_V    (1 << 0)   // "Valid" bit (entry is enabled)
+#define PAGE_R    (1 << 1)   // Readable
+#define PAGE_W    (1 << 2)   // Writable
+#define PAGE_X    (1 << 3)   // Executable
+#define PAGE_U    (1 << 4)   // User (accessible in user mode)
+
+#define USER_BASE 0x1000000
+#define SSTATUS_SPIE (1 << 5)
+
+#define SCAUSE_ECALL 8
+#define PROC_EXITED 2
+
+#define FILES_MAX      2
+#define DISK_MAX_SIZE  align_up(sizeof(struct file) * FILES_MAX, SECTOR_SIZE)
+
+struct tar_header {
+    char name[100];
+    char mode[8];
+    char uid[8];
+    char gid[8];
+    char size[12];
+    char mtime[12];
+    char checksum[8];
+    char type;
+    char linkname[100];
+    char magic[6];
+    char version[2];
+    char uname[32];
+    char gname[32];
+    char devmajor[8];
+    char devminor[8];
+    char prefix[155];
+    char padding[12];
+    char data[];      // Array pointing to the data area following the header
+                      // (flexible array member)
+} __attribute__((packed));
+
+struct file {
+    bool in_use;      // Indicates if this file entry is in use
+    char name[100];   // File name
+    char data[1024];  // File content
+    size_t size;      // File size
+};
+
+struct process {
+    int pid;             // Process ID
+    uint32_t *page_table;	// Page table
+    int state;           // Process state: PROC_UNUSED or PROC_RUNNABLE
+    vaddr_t sp;          // Stack pointer
+    uint8_t stack[8192]; // Kernel stack
 };
 
 struct trap_frame {
@@ -78,14 +98,26 @@ struct trap_frame {
     uint32_t sp;
 } __attribute__((packed));
 
+#define READ_CSR(reg)                                                          \
+    ({                                                                         \
+        unsigned long __tmp;                                                   \
+        __asm__ __volatile__("csrr %0, " #reg : "=r"(__tmp));                  \
+        __tmp;                                                                 \
+    })
 
-struct process {
-	int pid;
-	int state;
-	vaddr_t sp;
-	uint32_t *page_table;
-	uint8_t stack[8192];
-};
+#define WRITE_CSR(reg, value)                                                  \
+    do {                                                                       \
+        uint32_t __tmp = (value);                                              \
+        __asm__ __volatile__("csrw " #reg ", %0" ::"r"(__tmp));                \
+    } while (0)
+
+#define PANIC(fmt, ...)								        \
+	do {                                                                         	\
+		printf("PANIC: %s%d: " fmt "\n", __FILE__, __LINE__, ##__VA_ARGS__); 	\
+		while (1) {}								\
+	} while (0)
+
+// VIRTIO DISK
 
 #define SECTOR_SIZE       512
 #define VIRTQ_ENTRY_NUM   16
@@ -158,37 +190,3 @@ struct virtio_blk_req {
     uint8_t data[512];
     uint8_t status;
 } __attribute__((packed));
-
-#define FILES_MAX      2
-#define DISK_MAX_SIZE  align_up(sizeof(struct file) * FILES_MAX, SECTOR_SIZE)
-
-struct tar_header {
-    char name[100];
-    char mode[8];
-    char uid[8];
-    char gid[8];
-    char size[12];
-    char mtime[12];
-    char checksum[8];
-    char type;
-    char linkname[100];
-    char magic[6];
-    char version[2];
-    char uname[32];
-    char gname[32];
-    char devmajor[8];
-    char devminor[8];
-    char prefix[155];
-    char padding[12];
-    char data[];      // Array pointing to the data area following the header
-                      // (flexible array member)
-} __attribute__((packed));
-
-struct file {
-    bool in_use;      // Indicates if this file entry is in use
-    char name[100];   // File name
-    char data[1024];  // File content
-    size_t size;      // File size
-};
-
-#define SSTATUS_SUM  (1 << 18)
