@@ -1,5 +1,6 @@
 #include "user.h"
 
+
 void main(void) {
     while (1) {
 prompt:
@@ -22,7 +23,7 @@ prompt:
 
         if (strcmp(cmdline, "hello") == 0)
             printf("Hello world from shell!\n");
-		else if (strcmp(cmdline, "exit") == 0)
+        else if (strcmp(cmdline, "exit") == 0)
             exit();
         else if (strcmp(cmdline, "readfile") == 0) {
             char buf[128];
